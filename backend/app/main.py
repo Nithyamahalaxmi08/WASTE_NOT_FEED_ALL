@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth
+from app.database import supabase
 
 app = FastAPI()
 
@@ -13,6 +14,10 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
+@app.get("/db-test")
+def db_test():
+    result = supabase.table("donors").select("*").execute()
+    return result.data
 
 @app.get("/")
 def root():

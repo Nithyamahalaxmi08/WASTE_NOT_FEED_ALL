@@ -62,26 +62,21 @@ return true;
 };
 
 const handleLogin = async () => {
+  try {
 
-if(!validateForm()) return;
+    const result = await loginUser({
+      email,
+      password
+    });
 
-try{
+    alert(result.message || "Login successful");
 
-const result = await loginUser({
-email: email,
-password: password
-});
+  } catch (error) {
 
-alert(result.message || "Login successful");
+    console.log(error);
+    alert(error.message || "Login failed");
 
-}
-catch(error){
-
-console.log(error);
-alert("Login failed");
-
-}
-
+  }
 };
 
 return(

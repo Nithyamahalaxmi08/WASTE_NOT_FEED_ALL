@@ -115,7 +115,6 @@ def login(user: LoginSchema):
     if not verify_password(user.password, db_user["password"]):
         raise HTTPException(status_code=401, detail="Wrong password")
 
-    # NGO verification check
     if role == "ngo":
         if db_user["verification_status"] != "approved":
             raise HTTPException(
@@ -123,8 +122,14 @@ def login(user: LoginSchema):
                 detail="NGO account not verified yet"
             )
 
+    user_data = {
+        "id": db_user["id"],
+        "name": db_user["name"],
+        "email": db_user["email"]
+    }
+
     return {
         "message": "Login successful",
         "role": role,
-        "user": db_user
+        "user": user_data
     }

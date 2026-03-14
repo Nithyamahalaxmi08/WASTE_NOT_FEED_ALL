@@ -5,13 +5,12 @@ Text,
 TextInput,
 TouchableOpacity,
 StyleSheet,
-SafeAreaView
+SafeAreaView,
+ImageBackground
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { loginUser } from "../services/api";
 
-
-/* Input component OUTSIDE */
 const Input = ({ icon, placeholder, value, onChangeText, secure }) => (
 
 <View style={styles.inputBox}>
@@ -24,64 +23,48 @@ const Input = ({ icon, placeholder, value, onChangeText, secure }) => (
     value={value}
     onChangeText={onChangeText}
   />
-
 </View>
 
 );
-
 
 export default function LoginScreen({ navigation }) {
 
 const [email, setEmail] = useState("");
 const [password, setPassword] = useState("");
 
-const validateForm = () => {
-
-if(!email){
-alert("Email is required");
-return false;
-}
-
-if(!email.includes("@")){
-alert("Enter valid email");
-return false;
-}
-
-if(!password){
-alert("Password is required");
-return false;
-}
-
-if(password.length < 6){
-alert("Password must be at least 6 characters");
-return false;
-}
-
-return true;
-
-};
-
 const handleLogin = async () => {
   try {
 
-    const result = await loginUser({
-      email,
-      password
-    });
+    const result = await loginUser({ email, password });
 
-    alert(result.message || "Login successful");
+    alert(result.message);
+
+    if (result.role === "donor") {
+      navigation.replace("DonorDashboard");
+    }
+
+    else if (result.role === "volunteer") {
+      navigation.replace("VolunteerDashboard");
+    }
+
+    else if (result.role === "ngo") {
+      navigation.replace("NGODashboard");
+    }
 
   } catch (error) {
-
     console.log(error);
     alert(error.message || "Login failed");
-
   }
 };
 
 return(
 
-<SafeAreaView style={styles.container}>
+<ImageBackground
+source={{uri:"https://images.unsplash.com/photo-1604200657090-ae45994b2451"}}
+style={styles.background}
+>
+
+<SafeAreaView style={styles.overlay}>
 
 <View style={styles.formCard}>
 
@@ -117,32 +100,38 @@ Don't have an account? <Text style={styles.signup}>Sign Up</Text>
 
 </SafeAreaView>
 
+</ImageBackground>
+
 );
 }
 
 const styles = StyleSheet.create({
 
-container:{
+background:{
+flex:1
+},
+
+overlay:{
 flex:1,
-backgroundColor:"#F5F6F8",
+backgroundColor:"rgba(0,0,0,0.65)",
 justifyContent:"center",
-alignItems:"center"
+alignItems:"center",
+padding:20
 },
 
 formCard:{
 width:"90%",
-maxWidth:450,
+maxWidth:420,
 backgroundColor:"white",
-padding:40,
-borderRadius:16,
-elevation:4
+padding:35,
+borderRadius:18
 },
 
 logo:{
 fontSize:32,
 fontWeight:"bold",
 textAlign:"center",
-color:"#2E7D32"
+color:"#2ECC71"
 },
 
 subtitle:{
@@ -156,7 +145,7 @@ flexDirection:"row",
 alignItems:"center",
 borderWidth:1,
 borderColor:"#ddd",
-borderRadius:8,
+borderRadius:10,
 paddingHorizontal:12,
 marginBottom:20
 },
@@ -169,7 +158,7 @@ padding:14
 button:{
 backgroundColor:"#2ECC71",
 padding:16,
-borderRadius:8,
+borderRadius:10,
 alignItems:"center"
 },
 

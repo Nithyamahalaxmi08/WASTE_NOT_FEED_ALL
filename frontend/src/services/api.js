@@ -1,5 +1,8 @@
 const BASE_URL = "http://127.0.0.1:8000";
 
+import axios from "axios";
+// import { API_BASE_URL } from "../utils/constants";
+
 export const registerDonor = async (data) => {
   const response = await fetch(`${BASE_URL}/auth/register/donor`, {
     method: "POST",
@@ -73,3 +76,12 @@ export const loginUser = async (data) => {
 
   return result;
 };
+
+const API = axios.create({
+  baseURL: "http://127.0.0.1:8000",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+export default API;

@@ -9,6 +9,9 @@ import RegisterScreen from "../screens/RegisterScreen";
 import DonorRegisterScreen from "../screens/DonorRegisterScreen";
 import NgoRegisterScreen from "../screens/NgoRegisterScreen"; // Comment out if file doesn't exist yet
 import VolunteerRegisterScreen from "../screens/VolunteerRegisterScreen"; // Comment out if file doesn't exist yet
+import DonorDashboard from '../screens/DonorDashboard'; // Check spelling: Donar vs Donor
+import AddDonationScreen from '../screens/AddDonationScreen';
+
 
 const Stack = createNativeStackNavigator();
 
@@ -24,6 +27,18 @@ export default function AppNavigator() {
       <Stack.Screen name="NgoRegister" component={NgoRegisterScreen} />
       <Stack.Screen name="VolunteerRegister" component={VolunteerRegisterScreen} /> 
       
+      <Stack.Screen 
+        name="DonorDashboard" 
+        component={DonorDashboard} 
+        options={{ title: 'Donor Dashboard' }}
+      />
+      <Stack.Screen 
+        name="AddDonation" 
+        component={AddDonationScreen} 
+        options={{ title: 'Add New Donation' }}
+      />
+
     </Stack.Navigator>
+    
   );
 }

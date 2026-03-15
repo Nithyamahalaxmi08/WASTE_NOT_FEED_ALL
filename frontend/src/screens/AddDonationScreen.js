@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { Search, Bell, User, LogOut, HeartHandshake } from "lucide-react-native"; // Make sure to install: npm install lucide-react-native
-import API from "../services/api";
-
+import { API } from "../services/api";
 
 // Simple Header Component matching the images
 const Header = () => (

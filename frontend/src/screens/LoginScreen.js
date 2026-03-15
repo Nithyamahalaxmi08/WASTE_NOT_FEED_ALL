@@ -37,19 +37,31 @@ const handleLogin = async () => {
 
     const result = await loginUser({ email, password });
 
+    console.log("LOGIN RESPONSE:", result);
+
     alert(result.message);
 
     if (result.role === "donor") {
       navigation.replace("DonorDashboard");
     }
 
-    else if (result.role === "volunteer") {
-      navigation.replace("VolunteerDashboard");
+    // Navigate to volunteer dashboard after login
+    else if(result?.role === "volunteer" && result?.user?.id){
+      navigation.navigate("VolunteerDashboard", { volunteerId: result.user.id });
+      return;
     }
 
     else if (result.role === "ngo") {
-      navigation.replace("NGODashboard");
-    }
+
+      // // store NGO details
+      // localStorage.setItem("ngoId", result.ngo_id);
+      // localStorage.setItem("ngoName", result.name);
+
+      navigation.replace("NGODashboard", {
+      ngoId: result.user.id,
+      ngoName: result.user.name
+    });
+}
 
   } catch (error) {
     console.log(error);

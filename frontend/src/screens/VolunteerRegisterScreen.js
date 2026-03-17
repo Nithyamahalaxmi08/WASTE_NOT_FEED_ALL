@@ -27,7 +27,7 @@ const Input = ({icon,placeholder,field,form,setForm,secure}) => (
 );
 
 
-export default function VolunteerRegisterScreen(){
+export default function VolunteerRegisterScreen({ navigation }){
 
 const [form,setForm]=useState({
 name:"",
@@ -89,7 +89,13 @@ catch(error){
 return(
 
 <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-
+<TouchableOpacity 
+        style={styles.backBtn} 
+        onPress={() => navigation.goBack()}
+      >
+        <MaterialIcons name="arrow-back" size={24} color="#555" />
+        {/* <Text style={styles.backBtnText}>Back</Text> */}
+      </TouchableOpacity>
 <View style={styles.card}>
 
 <Text style={styles.title}>Volunteer Registration</Text>
@@ -202,6 +208,21 @@ borderRadius:8,
 paddingHorizontal:12
 },
 
+backBtn: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  backBtnText: {
+    marginLeft: 5,
+    fontSize: 16,
+    color: '#555',
+    fontWeight: '600',
+  },
+  
 input:{
 flex:1,
 padding:14

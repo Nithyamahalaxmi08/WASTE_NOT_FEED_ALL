@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import DonationDetailsScreen from "../screens/DonationDetailsScreen";
 
 // Import your existing screens
 import LoginScreen from "../screens/LoginScreen";
@@ -23,6 +24,13 @@ import HungerMapScreen        from "../screens/HungerMapScreen";
 // Volunteer screens
 import VolunteerDashboardScreen from "../screens/VolunteerDashboardScreen";
 import VolunteerProfileScreen from "../screens/VolunteerProfileScreen";
+
+// Add this import at the top with the others
+import DonorHomeScreen from "../screens/DonorHomeScreen";
+import ScanScreen      from "../screens/ScanScreen";
+
+import NGOProfileScreen from "../screens/ngo/NGOProfileScreen";
+import DonorProfileScreen from "../screens/DonorProfileScreen";
 
 const ph = StyleSheet.create({
   wrap:    { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f0f4f8" },
@@ -57,11 +65,18 @@ export default function AppNavigator() {
         options={{ headerShown: true, title: "My Claims" }} />
       <Stack.Screen name="HungerMap"         component={HungerMapScreen}
         options={{ headerShown: true, title: "Hunger Hotspot Map" }} />
+      <Stack.Screen name="NGOProfile" component={NGOProfileScreen}
+        options={{ headerShown: false }} />
  
       {/* Donor */}
       <Stack.Screen name="DonorDashboard"    component={DonorDashboard} />
       <Stack.Screen name="AddDonation"       component={AddDonationScreen}
         options={{ headerShown: true, title: "Post a Donation" }} />
+
+        <Stack.Screen name="DonorHome"      component={DonorHomeScreen} />   
+<Stack.Screen name="ScanScreen"     component={ScanScreen}          
+  options={{ headerShown: true, title: "Scan & Donate" }} />
+
  
       {/* Volunteer (placeholder)
       <Stack.Screen name="VolunteerDashboard">
@@ -71,6 +86,15 @@ export default function AppNavigator() {
       {/* Volunteer module */}
       <Stack.Screen name="VolunteerDashboard" component={VolunteerDashboardScreen} />
       <Stack.Screen name="VolunteerProfile" component={VolunteerProfileScreen} />
+
+      <Stack.Screen name="DonorProfile" component={DonorProfileScreen}
+  options={{ headerShown: false }} />
+
+      <Stack.Screen
+  name="DonationDetails"
+  component={DonationDetailsScreen}
+  options={{ title: "Donation Details" }}
+/>
     </Stack.Navigator>
   );
 }

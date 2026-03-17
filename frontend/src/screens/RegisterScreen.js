@@ -43,7 +43,13 @@ export default function HomeScreen({ navigation }) {
       resizeMode="cover"
     >
       <SafeAreaView style={styles.overlay}>
-
+        <TouchableOpacity 
+        style={styles.backBtn} 
+        onPress={() => navigation.goBack()}
+      >
+        <MaterialIcons name="arrow-back" size={24} color="#555" />
+        {/* <Text style={styles.backBtnText}>Back</Text> */}
+      </TouchableOpacity>
         <View style={styles.content}>
 
           <View style={styles.badge}>
@@ -178,6 +184,21 @@ const styles = StyleSheet.create({
   outlineBtn: {
     borderWidth: 2,
     borderColor: "#fff"
+  },
+
+  backBtn: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  backBtnText: {
+    marginLeft: 5,
+    fontSize: 16,
+    color: '#555',
+    fontWeight: '600',
   },
 
   btnText: {

@@ -133,6 +133,26 @@ def get_volunteer_profile(volunteer_id: int):
             "created_at": "2026-01-01T00:00:00Z"
         }
 
+@router.get("/profile/email/{email}")
+def get_volunteer_profile_by_email(email: str):
+    """Get volunteer profile by email"""
+    try:
+        result = supabase.table("volunteers").select("*").eq("email", email).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Volunteer not found")
+        return result.data[0]
+    except Exception as e:
+        # Return mock profile if database error
+        return {
+            "id": None,
+            "name": "John Doe",
+            "email": email,
+            "phone": "+91 9876543210",
+            "city": "Mumbai",
+            "is_active": True,
+            "created_at": "2026-01-01T00:00:00Z"
+        }
+
 @router.put("/donations/{donation_id}/status")
 def update_donation_status(donation_id: int, status: str, volunteer_id: int):
     """Update donation status (picked_up, delivered)"""

@@ -25,7 +25,7 @@ const Input = ({icon,placeholder,field,form,setForm,secure}) => (
 
 );
 
-export default function DonorRegisterScreen(){
+export default function DonorRegisterScreen({ navigation }){
 
 const [form,setForm]=useState({
 name:"",
@@ -93,6 +93,13 @@ return(
 
 <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
+      <TouchableOpacity 
+        style={styles.backBtn} 
+        onPress={() => navigation.goBack()}
+      >
+        <MaterialIcons name="arrow-back" size={24} color="#555" />
+        {/* <Text style={styles.backBtnText}>Back</Text> */}
+      </TouchableOpacity>
 <View style={styles.card}>
 
 <Text style={styles.title}>Donor Registration</Text>
@@ -180,6 +187,21 @@ fontSize:26,
 fontWeight:"bold",
 marginBottom:30
 },
+
+backBtn: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  backBtnText: {
+    marginLeft: 5,
+    fontSize: 16,
+    color: '#555',
+    fontWeight: '600',
+  },
 
 row:{
 flexDirection:"row",

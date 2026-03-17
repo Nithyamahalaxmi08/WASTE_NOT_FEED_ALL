@@ -27,7 +27,7 @@ const Input = ({icon,placeholder,field,form,setForm,secure}) => (
 );
 
 
-export default function NgoRegisterScreen(){
+export default function NgoRegisterScreen({ navigation }){
 
 const [form,setForm] = useState({
 name:"",
@@ -125,7 +125,13 @@ const handleRegister = async () => {
 return(
 
 <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-
+<TouchableOpacity 
+        style={styles.backBtn} 
+        onPress={() => navigation.goBack()}
+      >
+        <MaterialIcons name="arrow-back" size={24} color="#555" />
+        {/* <Text style={styles.backBtnText}>Back</Text> */}
+      </TouchableOpacity>
 <View style={styles.card}>
 
 <Text style={styles.title}>NGO Registration</Text>
@@ -237,6 +243,21 @@ alignItems:"center",
 backgroundColor:"#F5F6F8",
 padding:30
 },
+
+backBtn: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  backBtnText: {
+    marginLeft: 5,
+    fontSize: 16,
+    color: '#555',
+    fontWeight: '600',
+  },
 
 card:{
 width:"90%",

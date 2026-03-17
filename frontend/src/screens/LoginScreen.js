@@ -42,8 +42,10 @@ const handleLogin = async () => {
     alert(result.message);
 
     if (result.role === "donor") {
-      navigation.replace("DonorDashboard");
-    }
+  navigation.replace("DonorHome", {
+    donorId: result.user?.id || "",
+  });
+}
 
     // Navigate to volunteer dashboard after login
     else if(result?.role === "volunteer" && result?.user?.id){

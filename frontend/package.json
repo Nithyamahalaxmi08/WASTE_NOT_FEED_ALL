@@ -13,6 +13,7 @@
     "expo-camera": "~55.0.9",
     "expo-file-system": "~55.0.10",
     "expo-image-picker": "~55.0.12",
+    "expo-location": "~55.1.2",
     "express": "^5.2.1",
     "leaflet": "^1.9.4",
     "lucide-react-native": "^0.577.0",

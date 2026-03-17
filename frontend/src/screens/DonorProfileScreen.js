@@ -25,8 +25,11 @@ const crossAlert = (title, msg) => {
 
 const isValidPhone = (str) => /^[6-9]\d{9}$/.test(str.trim());
 
+const isValidDonorId = (id) =>
+  id && id !== "null" && id !== "undefined" && String(id).trim() !== "";
+
 // ─────────────────────────────────────────────
-// Navbar — same style as AddDonationScreen
+// Navbar
 // ─────────────────────────────────────────────
 
 const Navbar = ({ navigation, donorId, onLogout }) => (
@@ -108,20 +111,27 @@ const EditField = ({ label, value, onChange, placeholder, required, keyboard, lo
 // ─────────────────────────────────────────────
 
 export default function DonorProfileScreen({ navigation, route }) {
-  const donorId = route?.params?.donorId || "";
 
-  const [profile,  setProfile]  = useState(null);
-  const [loading,  setLoading]  = useState(true);
-  const [editing,  setEditing]  = useState(false);
-  const [saving,   setSaving]   = useState(false);
+  // ── Safely extract donorId ─────────────────
+  const rawId   = route?.params?.donorId;
+  const donorId = isValidDonorId(rawId) ? String(rawId).trim() : null;
 
-  const [form, setForm] = useState({
-    name:    "",
-    phone:   "",
-    address: "",
-  });
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [saving,  setSaving]  = useState(false);
 
-  useEffect(() => { fetchProfile(); }, []);
+  const [form, setForm] = useState({ name: "", phone: "", address: "" });
+
+  // ── Guard: redirect to Login if no valid donorId ──
+  useEffect(() => {
+    if (!donorId) {
+      crossAlert("Session Error", "Donor ID is missing. Please log in again.");
+      navigation.replace("Login");
+      return;
+    }
+    fetchProfile();
+  }, []);
 
   // ── Fetch ──────────────────────────────────
   const fetchProfile = async () => {
@@ -143,14 +153,15 @@ export default function DonorProfileScreen({ navigation, route }) {
 
   // ── Logout ─────────────────────────────────
   const handleLogout = async () => {
-    const confirmed = Platform.OS === "web"
-      ? window.confirm("Are you sure you want to logout?")
-      : await new Promise((resolve) =>
-          Alert.alert("Logout", "Are you sure you want to logout?", [
-            { text: "Cancel", style: "cancel",      onPress: () => resolve(false) },
-            { text: "Logout", style: "destructive", onPress: () => resolve(true)  },
-          ])
-        );
+    const confirmed =
+      Platform.OS === "web"
+        ? window.confirm("Are you sure you want to logout?")
+        : await new Promise((resolve) =>
+            Alert.alert("Logout", "Are you sure you want to logout?", [
+              { text: "Cancel", style: "cancel",      onPress: () => resolve(false) },
+              { text: "Logout", style: "destructive", onPress: () => resolve(true)  },
+            ])
+          );
     if (!confirmed) return;
     try { await logoutUser(); } catch (e) { console.warn(e); }
     navigation.replace("Login");
@@ -215,6 +226,12 @@ export default function DonorProfileScreen({ navigation, route }) {
         <Text style={{ color: "#e53935", fontSize: 16 }}>
           ⚠️ Could not load profile.
         </Text>
+        <TouchableOpacity
+          style={styles.retryBtn}
+          onPress={fetchProfile}
+        >
+          <Text style={styles.retryBtnText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -223,7 +240,6 @@ export default function DonorProfileScreen({ navigation, route }) {
   return (
     <SafeAreaView style={styles.container}>
 
-      {/* Navbar */}
       <Navbar navigation={navigation} donorId={donorId} onLogout={handleLogout} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -242,7 +258,8 @@ export default function DonorProfileScreen({ navigation, route }) {
           </View>
           {profile.created_at && (
             <Text style={styles.joinedText}>
-              Member since {new Date(profile.created_at).toLocaleDateString("en-IN", {
+              Member since{" "}
+              {new Date(profile.created_at).toLocaleDateString("en-IN", {
                 month: "long", year: "numeric",
               })}
             </Text>
@@ -276,24 +293,19 @@ export default function DonorProfileScreen({ navigation, route }) {
               Email cannot be changed. Fields marked * are required.
             </Text>
 
-            {/* Email — locked */}
-            <EditField
-              label="Email"
-              value={profile.email}
-              locked
-            />
+            <EditField label="Email" value={profile.email} locked />
 
             <EditField
               label="Full Name" required
               value={form.name}
-              onChange={(v) => setForm(p => ({ ...p, name: v }))}
+              onChange={(v) => setForm((p) => ({ ...p, name: v }))}
               placeholder="Your full name"
             />
 
             <EditField
               label="Phone" required
               value={form.phone}
-              onChange={(v) => setForm(p => ({ ...p, phone: v.replace(/\D/g, "") }))}
+              onChange={(v) => setForm((p) => ({ ...p, phone: v.replace(/\D/g, "") }))}
               placeholder="10-digit mobile number"
               keyboard="phone-pad"
             />
@@ -301,11 +313,10 @@ export default function DonorProfileScreen({ navigation, route }) {
             <EditField
               label="Address"
               value={form.address}
-              onChange={(v) => setForm(p => ({ ...p, address: v }))}
+              onChange={(v) => setForm((p) => ({ ...p, address: v }))}
               placeholder="Your full address"
             />
 
-            {/* Save / Cancel */}
             <View style={styles.editActions}>
               <TouchableOpacity
                 style={styles.cancelBtn}
@@ -391,4 +402,8 @@ const styles = StyleSheet.create({
   /* Large edit button */
   editBtnLarge:         { marginTop: 20, backgroundColor: "#e8f5e9", borderRadius: 10, padding: 14, alignItems: "center", borderWidth: 1.5, borderColor: "#28a745" },
   editBtnLargeText:     { color: "#28a745", fontWeight: "700", fontSize: 15 },
+
+  /* Retry button */
+  retryBtn:             { marginTop: 16, backgroundColor: "#28a745", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 24 },
+  retryBtnText:         { color: "#fff", fontWeight: "700", fontSize: 14 },
 });

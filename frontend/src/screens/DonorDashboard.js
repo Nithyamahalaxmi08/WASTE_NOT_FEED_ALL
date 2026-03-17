@@ -61,7 +61,7 @@ const DonorDashboard = ({ navigation, route }) => {
         <View style={styles.navRight}>
           <TouchableOpacity
             style={styles.navLink}
-            onPress={() => navigation.navigate("AddDonation")}
+            onPress={() => navigation.navigate("AddDonation", { donorId })}
           >
             <Text style={styles.navLinkActive}>Post Donation</Text>
           </TouchableOpacity>

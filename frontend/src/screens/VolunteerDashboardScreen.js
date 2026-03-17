@@ -1,573 +1,685 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView } from "react-native";
-import { getAvailableDonations, assignDonation, getAssignedDonations, getVolunteerProfile, updateDonationStatus, getVolunteerStats } from "../services/api";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View, Text, StyleSheet, TouchableOpacity,
+  FlatList, Alert, ScrollView, RefreshControl,
+  Platform, Modal, ActivityIndicator, Animated,
+} from "react-native";
+import {
+  getAssignedDonations,
+  getVolunteerProfile,
+  updateDonationStatus,
+  getVolunteerStats,
+  getDonationDetails,
+} from "../services/api";
+
+// ─── Colour palette — deep forest green (like the reference image) ─
+const C = {
+  primary:      "#2d6a4f",   // deep forest green
+  primaryDark:  "#1b4332",   // darker forest green
+  primaryLight: "#d8f3dc",   // very soft mint
+  primarySoft:  "#f1faf3",   // near-white green tint
+  primaryMid:   "#74c69d",   // mid green
+
+  // Mapped aliases (so no other refs break)
+  amber:        "#2d6a4f",
+  amberLight:   "#d8f3dc",
+  rose:         "#dc2626",   // sign out only
+  indigo:       "#2d6a4f",
+  indigoLight:  "#d8f3dc",
+
+  // Neutrals — warm not cool
+  dark:         "#081c15",
+  text:         "#1b2d25",
+  subtext:      "#4a6560",
+  muted:        "#95b5a8",
+  border:       "#c8e6d4",
+  surface:      "#f6faf7",
+  white:        "#ffffff",
+};
 
 export default function VolunteerDashboardScreen({ navigation, route }) {
-  const [availableDonations, setAvailableDonations] = useState([]);
-  const [assignedDonations, setAssignedDonations] = useState([]);
-  const [profile, setProfile] = useState(null);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [volunteerId, setVolunteerId] = useState(route?.params?.volunteerId || 1);
+  const [ngoAssignedDonations, setNgoAssignedDonations] = useState([]);
+  const [activeDonations,      setActiveDonations]      = useState([]);
+  const [completedDonations,   setCompletedDonations]   = useState([]);
+  const [profile,    setProfile]    = useState(null);
+  const [stats,      setStats]      = useState(null);
+  const [loading,    setLoading]    = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab,  setActiveTab]  = useState("assigned");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailModal, setDetailModal] = useState(null);
+  const [updatingId,  setUpdatingId]  = useState(null);
 
+  const drawerAnim = useState(new Animated.Value(-300))[0];
+
+  const volunteerId    = route?.params?.volunteerId || null;
+  const volunteerEmail = route?.params?.email || null;
+
+  // ── Drawer ────────────────────────────────────────────────────────
+  const openDrawer = () => {
+    setDrawerOpen(true);
+    Animated.spring(drawerAnim, { toValue: 0, useNativeDriver: false, tension: 65, friction: 11 }).start();
+  };
+  const closeDrawer = () => {
+    Animated.timing(drawerAnim, { toValue: -300, duration: 220, useNativeDriver: false }).start(() => setDrawerOpen(false));
+  };
+
+  // ── Data ──────────────────────────────────────────────────────────
   useEffect(() => {
-    loadData();
-  }, [volunteerId]);
+    if (volunteerId || volunteerEmail) loadData();
+  }, [volunteerId, volunteerEmail]);
 
-  const loadData = async () => {
-    if (!volunteerId) return;
+  const loadData = useCallback(async () => {
+    if (!volunteerId && !volunteerEmail) return;
     setLoading(true);
     try {
-      const avail = await getAvailableDonations();
-      setAvailableDonations(avail);
-
-      const assigned = await getAssignedDonations(volunteerId);
-      setAssignedDonations(assigned);
-
-      const prof = await getVolunteerProfile(volunteerId);
+      if (volunteerId) {
+        const all = (await getAssignedDonations(volunteerId)) || [];
+        setNgoAssignedDonations(all.filter(d => d.status === "assigned"));
+        setActiveDonations(all.filter(d => d.status === "picked_up"));
+        setCompletedDonations(all.filter(d => d.status === "delivered"));
+      }
+      const prof = await getVolunteerProfile({ volunteerId, email: volunteerEmail });
       setProfile(prof);
-
-      const stat = await getVolunteerStats(volunteerId);
-      setStats(stat);
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "Failed to load data");
+      const effectiveId = volunteerId || prof?.id;
+      if (effectiveId) {
+        const stat = await getVolunteerStats(effectiveId);
+        setStats(stat);
+      }
+    } catch (err) {
+      console.log("loadData:", err);
+      Alert.alert("Error", "Could not load data. Pull down to retry.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
+    }
+  }, [volunteerId, volunteerEmail]);
+
+  // ── Status update ─────────────────────────────────────────────────
+  const handleUpdateStatus = (item, newStatus) => {
+    if (!volunteerId) { Alert.alert("Error", "Please log in again."); return; }
+
+    const label   = newStatus === "picked_up" ? "Mark as Picked Up" : "Mark as Delivered";
+    const message = newStatus === "picked_up"
+      ? "Confirm you have collected this donation."
+      : "Confirm this donation has been delivered.";
+
+    const execute = async () => {
+      setUpdatingId(item.id);
+      try {
+        await updateDonationStatus(item.id, newStatus, volunteerId);
+        if (newStatus === "picked_up") {
+          setNgoAssignedDonations(p => p.filter(d => d.id !== item.id));
+          setActiveDonations(p => [...p, { ...item, status: "picked_up" }]);
+          setActiveTab("pickedup");
+        } else {
+          setActiveDonations(p => p.filter(d => d.id !== item.id));
+          setCompletedDonations(p => [...p, { ...item, status: "delivered" }]);
+          setActiveTab("completed");
+        }
+      } catch (err) {
+        const msg = err.message || "Unknown error";
+        console.log("STATUS UPDATE FAILED:", item.id, newStatus, volunteerId, msg);
+        if (Platform.OS === "web") {
+          window.alert("Failed: " + msg + " — Check browser console.");
+        } else {
+          Alert.alert("Update Failed", msg);
+        }
+      } finally {
+        setUpdatingId(null);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(label + "?\n" + message)) execute();
+    } else {
+      Alert.alert(label, message, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Confirm", onPress: execute },
+      ]);
     }
   };
 
-  const handleAssignDonation = async (donationId) => {
+  // ── Details ───────────────────────────────────────────────────────
+  const handleViewDetails = async (donation) => {
+    setDetailModal({ ...donation, _loading: true });
     try {
-      await assignDonation(donationId, volunteerId);
-      Alert.alert("Success", "Donation assigned to you!");
-      loadData(); // Refresh data
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "Failed to assign donation");
+      const d = await getDonationDetails(donation.id);
+      setDetailModal({ ...d, _loading: false });
+    } catch {
+      setDetailModal({ ...donation, _loading: false, _error: true });
     }
   };
 
-  const handleUpdateStatus = async (donationId, newStatus) => {
-    try {
-      await updateDonationStatus(donationId, newStatus, volunteerId);
-      Alert.alert("Success", `Status updated to ${newStatus.replace('_', ' ')}!`);
-      loadData(); // Refresh data
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "Failed to update status");
-    }
+  const handleLogout  = () => navigation.replace("Login");
+  const handleProfile = () => { closeDrawer(); navigation.navigate("VolunteerProfile", { volunteerId, email: volunteerEmail }); };
+
+  // ── Helpers ───────────────────────────────────────────────────────
+  const tabs = [
+    { key: "assigned",  label: "Assigned",  count: ngoAssignedDonations.length },
+    { key: "pickedup",  label: "Picked Up", count: activeDonations.length },
+    { key: "completed", label: "Done",      count: completedDonations.length },
+  ];
+  const currentData = () => {
+    if (activeTab === "assigned")  return ngoAssignedDonations;
+    if (activeTab === "pickedup")  return activeDonations;
+    return completedDonations;
+  };
+  const firstName = profile?.name ? profile.name.split(" ")[0] : "Volunteer";
+  const initials  = profile?.name
+    ? profile.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
+    : "V";
+
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
   };
 
-  const handleViewDonorDetails = (donation) => {
-    Alert.alert(
-      "Donation Details",
-      `Food: ${donation.name}\nType: ${donation.type || 'N/A'}\nLocation: ${donation.pickup_location || 'N/A'}\nContact: ${donation.contact_no || 'N/A'}\nExpiry: ${donation.expiry ? new Date(donation.expiry).toLocaleDateString() : 'N/A'}\nDescription: ${donation.description || 'N/A'}`,
-      [{ text: "OK" }]
+  // ── Card ──────────────────────────────────────────────────────────
+  const renderCard = ({ item }) => {
+    const isDone     = activeTab === "completed";
+    const isPickedup = activeTab === "pickedup";
+    const isAssigned = activeTab === "assigned";
+
+    const accentBg   = isDone ? C.primaryLight : isPickedup ? "#d8f3dc" : C.primarySoft;
+    const accentText = isDone ? C.primaryDark  : isPickedup ? C.primaryDark : C.primary;
+    const statusLabel = isDone ? "DELIVERED" : isPickedup ? "IN TRANSIT" : "PENDING";
+
+    return (
+      <View style={styles.card}>
+        {/* Coloured left stripe */}
+        <View style={[styles.cardStripe, {
+          backgroundColor: isDone ? C.primaryDark : isPickedup ? C.primary : "#4ade80"
+        }]} />
+
+        <View style={styles.cardBody}>
+          {/* Header row */}
+          <View style={styles.cardHead}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {item.name || item.food_type || "Unnamed Donation"}
+            </Text>
+            <View style={[styles.statusPill, { backgroundColor: accentBg }]}>
+              <Text style={[styles.statusPillText, { color: accentText }]}>{statusLabel}</Text>
+            </View>
+          </View>
+
+          {/* Location */}
+          <View style={styles.cardLocRow}>
+            <Text style={styles.cardLocDot}>●</Text>
+            <Text style={styles.cardLoc} numberOfLines={1}>
+              {item.pickup_location || "Location not specified"}
+            </Text>
+          </View>
+
+          {/* Chips */}
+          {(item.quantity || item.expiry || item.contact_no) ? (
+            <View style={styles.chipRow}>
+              {item.quantity   ? <View style={styles.chip}><Text style={styles.chipText}>{item.quantity}</Text></View> : null}
+              {item.expiry     ? <View style={styles.chip}><Text style={styles.chipText}>Exp {new Date(item.expiry).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</Text></View> : null}
+              {item.contact_no ? <View style={styles.chip}><Text style={styles.chipText}>{item.contact_no}</Text></View> : null}
+              {isDone && item.delivered_at ? <View style={[styles.chip, { backgroundColor: C.primaryLight }]}><Text style={[styles.chipText, { color: C.primary }]}>{new Date(item.delivered_at).toLocaleDateString()}</Text></View> : null}
+            </View>
+          ) : null}
+
+          {/* Actions */}
+          <View style={styles.cardActions}>
+            <TouchableOpacity style={styles.btnGhost} onPress={() => handleViewDetails(item)}>
+              <Text style={styles.btnGhostText}>Details</Text>
+            </TouchableOpacity>
+
+            {(isAssigned || isPickedup) && (
+              <TouchableOpacity
+                style={styles.btnOutline}
+                onPress={() => navigation.navigate("DonationMap", { donation: item })}
+              >
+                <Text style={styles.btnOutlineText}>📍 Route</Text>
+              </TouchableOpacity>
+            )}
+
+            {isAssigned && (
+              <TouchableOpacity
+                style={[styles.btnPrimary, updatingId === item.id && styles.btnPrimaryLoading]}
+                disabled={updatingId === item.id}
+                onPress={() => updatingId ? null : handleUpdateStatus(item, "picked_up")}
+              >
+                <Text style={styles.btnPrimaryText}>
+                  {updatingId === item.id ? "..." : "Picked Up"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {isPickedup && (
+              <TouchableOpacity
+                style={[styles.btnAmber, updatingId === item.id && styles.btnPrimaryLoading]}
+                disabled={updatingId === item.id}
+                onPress={() => updatingId ? null : handleUpdateStatus(item, "delivered")}
+              >
+                <Text style={styles.btnPrimaryText}>
+                  {updatingId === item.id ? "..." : "Delivered"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </View>
     );
   };
 
-  const handleViewPickups = async () => {
-    Alert.alert("Refreshing", "Loading available donations...");
-    await loadData();
-    Alert.alert("Refreshed", `Found ${availableDonations.length} available donations`);
-  };
-
-  const handleMyTasks = async () => {
-    Alert.alert("Refreshing", "Loading your tasks...");
-    await loadData();
-    Alert.alert("Refreshed", `You have ${assignedDonations.length} assigned tasks`);
-  };
-
-  const handleProfile = () => {
-    if (profile) {
-      navigation.navigate("VolunteerProfile", { profile, volunteerId });
-    } else {
-      Alert.alert("Profile", "Loading profile...");
-    }
-  };
-
-  const handleStats = () => {
-    if (stats) {
-      Alert.alert(
-        "Your Stats",
-        `Total Tasks: ${stats.total_tasks}\nCompleted: ${stats.completed_tasks}\nActive: ${stats.active_tasks}`,
-        [{ text: "OK" }]
-      );
-    } else {
-      Alert.alert("Stats", "Loading stats...");
-    }
-  };
-
-  const handleLogout = () => {
-    navigation.navigate("Login");
-  };
-
-  const renderDonation = ({ item }) => (
-    <View style={styles.donationCard}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.foodName}>{item.name}</Text>
-        <Text style={styles.foodType}>{item.type || 'General'}</Text>
-      </View>
-
-      <View style={styles.cardDetails}>
-        <Text style={styles.detailText}>📍 {item.pickup_location || 'Location TBA'}</Text>
-        <Text style={styles.detailText}>📅 Expires: {item.expiry ? new Date(item.expiry).toLocaleDateString() : 'N/A'}</Text>
-        {item.contact_no && <Text style={styles.detailText}>📞 {item.contact_no}</Text>}
-      </View>
-
-      <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.detailsButton} onPress={() => handleViewDonorDetails(item)}>
-          <Text style={styles.detailsButtonText}>ℹ️ Details</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.assignButton} onPress={() => handleAssignDonation(item.id)}>
-          <Text style={styles.assignButtonText}>✅ Assign to Me</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderAssigned = ({ item }) => (
-    <View style={styles.donationCard}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.foodName}>{item.name}</Text>
-        <Text style={styles.statusBadge}>{item.status.replace('_', ' ').toUpperCase()}</Text>
-      </View>
-
-      <View style={styles.cardDetails}>
-        <Text style={styles.detailText}>📍 {item.pickup_location || 'Location TBA'}</Text>
-        <Text style={styles.detailText}>📅 Expires: {item.expiry ? new Date(item.expiry).toLocaleDateString() : 'N/A'}</Text>
-      </View>
-
-      <View style={styles.cardActions}>
-        {item.status === 'assigned' && (
-          <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus(item.id, 'picked_up')}>
-            <Text style={styles.statusButtonText}>🚚 Mark Picked Up</Text>
-          </TouchableOpacity>
-        )}
-        {item.status === 'picked_up' && (
-          <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus(item.id, 'delivered')}>
-            <Text style={styles.statusButtonText}>✅ Mark Delivered</Text>
-          </TouchableOpacity>
-        )}
-        {item.status === 'delivered' && (
-          <View style={styles.completedBadge}>
-            <Text style={styles.completedText}>🎉 Completed!</Text>
-          </View>
-        )}
-      </View>
-    </View>
-  );
-
+  // ── Render ────────────────────────────────────────────────────────
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header Section */}
-      <View style={styles.header}>
-        <Text style={styles.title}>🍽️ Waste Not Feed All</Text>
-        <Text style={styles.subtitle}>Volunteer Dashboard</Text>
-        {profile && <Text style={styles.welcome}>Welcome back, {profile.name || 'Volunteer'}! 👋</Text>}
-      </View>
+    <View style={styles.root}>
 
-      {/* Stats Card */}
-      {stats && (
-        <View style={styles.statsCard}>
-          <Text style={styles.statsTitle}>📊 Your Impact</Text>
+      {/* Drawer overlay */}
+      {drawerOpen && (
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeDrawer} />
+      )}
+
+      {/* Drawer */}
+      <Animated.View style={[styles.drawer, { left: drawerAnim }]}>
+        {/* Drawer top */}
+        <View style={styles.drawerTop}>
+          <View style={styles.drawerAvatar}>
+            <Text style={styles.drawerAvatarText}>{initials}</Text>
+          </View>
+          <Text style={styles.drawerName}>{profile?.name || "Volunteer"}</Text>
+          <Text style={styles.drawerEmail}>{profile?.email || volunteerEmail || ""}</Text>
+        </View>
+
+        {/* Drawer nav */}
+        <View style={styles.drawerNav}>
+          <Text style={styles.drawerNavLabel}>NAVIGATION</Text>
+          {[
+            { key: "assigned",  label: "Assigned Tasks", count: ngoAssignedDonations.length, color: "#4ade80"      },
+            { key: "pickedup",  label: "Picked Up",       count: activeDonations.length,      color: C.primary      },
+            { key: "completed", label: "Completed",       count: completedDonations.length,   color: C.primaryDark  },
+          ].map(it => (
+            <TouchableOpacity
+              key={it.key}
+              style={[styles.drawerItem, activeTab === it.key && styles.drawerItemActive]}
+              onPress={() => { setActiveTab(it.key); closeDrawer(); }}
+            >
+              <View style={[styles.drawerItemDot, { backgroundColor: it.color }]} />
+              <Text style={[styles.drawerItemText, activeTab === it.key && { color: C.primary, fontWeight: "700" }]}>
+                {it.label}
+              </Text>
+              <View style={[styles.drawerCount, activeTab === it.key && { backgroundColor: C.primaryLight }]}>
+                <Text style={[styles.drawerCountText, activeTab === it.key && { color: C.primary }]}>{it.count}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.drawerDivider} />
+
+        <TouchableOpacity style={styles.drawerAction} onPress={handleProfile}>
+          <Text style={styles.drawerActionText}>My Profile</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.drawerAction} onPress={handleLogout}>
+          <Text style={[styles.drawerActionText, { color: C.rose }]}>Sign Out</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* Main */}
+      <View style={styles.main}>
+
+        {/* Hero header */}
+        <View style={styles.hero}>
+          <TouchableOpacity style={styles.hamburger} onPress={openDrawer}>
+            <View style={styles.bar} />
+            <View style={[styles.bar, { width: 18 }]} />
+            <View style={styles.bar} />
+          </TouchableOpacity>
+
+          <View style={styles.heroText}>
+            <Text style={styles.heroGreeting}>{getGreeting()},</Text>
+            <Text style={styles.heroName}>{firstName} 👋</Text>
+          </View>
+
+          <TouchableOpacity style={styles.avatarBtn} onPress={handleProfile}>
+            <Text style={styles.avatarBtnText}>{initials}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats cards */}
+        {stats && (
           <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.completed_tasks || 0}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.active_tasks || 0}</Text>
-              <Text style={styles.statLabel}>Active</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.total_tasks || 0}</Text>
-              <Text style={styles.statLabel}>Total</Text>
-            </View>
+            {[
+              { n: stats.total_tasks     || 0, l: "Total",     bg: C.primaryLight, fg: C.primaryDark },
+              { n: stats.active_tasks    || 0, l: "Active",    bg: "#d8f3dc",      fg: "#2d6a4f"     },
+              { n: stats.completed_tasks || 0, l: "Completed", bg: C.primarySoft,  fg: C.primary     },
+            ].map(s => (
+              <View key={s.l} style={[styles.statCard, { backgroundColor: s.bg }]}>
+                <Text style={[styles.statNum, { color: s.fg }]}>{s.n}</Text>
+                <Text style={[styles.statLbl, { color: s.fg }]}>{s.l}</Text>
+              </View>
+            ))}
           </View>
-        </View>
-      )}
+        )}
 
-      {/* Loading Indicator */}
-      {loading && (
-        <View style={styles.loadingCard}>
-          <Text style={styles.loadingText}>🔄 Loading donations...</Text>
+        {/* Tab strip */}
+        <View style={styles.tabStrip}>
+          {tabs.map(tab => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
+              {tab.count > 0 && (
+                <View style={[styles.tabBadge, activeTab === tab.key && styles.tabBadgeActive]}>
+                  <Text style={[styles.tabBadgeText, activeTab === tab.key && styles.tabBadgeTextActive]}>
+                    {tab.count}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
         </View>
-      )}
 
-      {/* Available Donations */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>📦 Available Pickups</Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{availableDonations.length}</Text>
-          </View>
-        </View>
-        {availableDonations.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No donations available right now</Text>
-            <Text style={styles.emptySubtext}>Check back later!</Text>
+        {/* List */}
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={C.primary} />
+            <Text style={styles.loadingText}>Loading your tasks…</Text>
           </View>
         ) : (
           <FlatList
-            data={availableDonations}
-            renderItem={renderDonation}
-            keyExtractor={(item) => item.id.toString()}
+            data={currentData()}
+            keyExtractor={item => item.id.toString()}
+            renderItem={renderCard}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => { setRefreshing(true); loadData(); }}
+                tintColor={C.primary}
+                colors={[C.primary]}
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <View style={styles.emptyCircle}>
+                  <Text style={styles.emptyEmoji}>
+                    {activeTab === "assigned" ? "📋" : activeTab === "pickedup" ? "🚚" : "✅"}
+                  </Text>
+                </View>
+                <Text style={styles.emptyTitle}>
+                  {activeTab === "assigned"  ? "No assignments yet"
+                   : activeTab === "pickedup" ? "Nothing in transit"
+                   : "No completed deliveries"}
+                </Text>
+                <Text style={styles.emptySub}>
+                  {activeTab === "assigned"  ? "An NGO will assign donations to you here"
+                   : activeTab === "pickedup" ? "Mark a task as picked up to see it here"
+                   : "Delivered donations will appear here"}
+                </Text>
+              </View>
+            }
           />
         )}
       </View>
 
-      {/* My Tasks */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>🚚 My Active Tasks</Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{assignedDonations.length}</Text>
+      {/* Details modal */}
+      <Modal visible={!!detailModal} transparent animationType="slide" onRequestClose={() => setDetailModal(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle} numberOfLines={2}>
+                {detailModal?._loading ? "Fetching details…" : detailModal?.name || "Donation Details"}
+              </Text>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setDetailModal(null)}>
+                <Text style={styles.modalCloseTxt}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {detailModal?._loading ? (
+              <View style={styles.modalLoading}><ActivityIndicator size="large" color={C.primary} /></View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                {detailModal?._error && (
+                  <View style={styles.modalErrBanner}>
+                    <Text style={styles.modalErrText}>Showing cached data — server unavailable</Text>
+                  </View>
+                )}
+                {[
+                  { label: "Food Item",   value: detailModal?.name },
+                  { label: "Type",        value: detailModal?.type },
+                  { label: "Quantity",    value: detailModal?.quantity },
+                  { label: "Location",    value: detailModal?.pickup_location || detailModal?.location },
+                  { label: "Contact",     value: detailModal?.contact_no },
+                  { label: "Expiry",      value: detailModal?.expiry ? new Date(detailModal.expiry).toLocaleString() : null },
+                  { label: "Status",      value: detailModal?.status },
+                  { label: "Posted",      value: detailModal?.created_at ? new Date(detailModal.created_at).toLocaleString() : null },
+                  { label: "Picked Up",   value: detailModal?.picked_up_at ? new Date(detailModal.picked_up_at).toLocaleString() : null },
+                  { label: "Delivered",   value: detailModal?.delivered_at ? new Date(detailModal.delivered_at).toLocaleString() : null },
+                ].filter(r => r.value).map(row => (
+                  <View key={row.label} style={styles.modalRow}>
+                    <Text style={styles.modalRowLabel}>{row.label}</Text>
+                    <Text style={styles.modalRowValue}>{row.value}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            {/* small pill close at bottom — replaces big full-width button */}
+            <TouchableOpacity style={styles.modalPillClose} onPress={() => setDetailModal(null)}>
+              <Text style={styles.modalPillCloseTxt}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
-        {assignedDonations.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No active tasks</Text>
-            <Text style={styles.emptySubtext}>Assign some donations to get started!</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={assignedDonations}
-            renderItem={renderAssigned}
-            keyExtractor={(item) => item.id.toString()}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContainer}
-          />
-        )}
-      </View>
+      </Modal>
 
-      {/* Bottom Buttons */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity style={styles.primaryButton} onPress={handleProfile}>
-          <Text style={styles.primaryButtonText}>👤 My Profile</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleLogout}>
-          <Text style={styles.secondaryButtonText}>🚪 Logout</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
+  root:    { flex: 1, backgroundColor: C.surface },  // surface = #f6faf7
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,23,42,0.5)", zIndex: 10 },
 
-  header: {
-    backgroundColor: '#fff',
-    padding: 25,
-    paddingTop: 50,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-    alignItems: 'center',
+  // ── Drawer ──────────────────────────────────────────────────────
+  drawer: {
+    position: "absolute", top: 0, bottom: 0, width: 300,
+    backgroundColor: C.white, zIndex: 20,
+    paddingTop: 60, paddingBottom: 40,
+    shadowColor: C.dark, shadowOpacity: 0.15, shadowRadius: 24, elevation: 20,
+    borderTopRightRadius: 24, borderBottomRightRadius: 24,
   },
-
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2d3748',
-    marginBottom: 5,
+  drawerTop: {
+    paddingHorizontal: 24, paddingBottom: 24,
+    borderBottomWidth: 1, borderBottomColor: C.border,
   },
-
-  subtitle: {
-    fontSize: 16,
-    color: '#718096',
-    marginBottom: 10,
+  drawerAvatar: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: C.primary,
+    justifyContent: "center", alignItems: "center", marginBottom: 12,
   },
+  drawerAvatarText: { color: C.white, fontSize: 20, fontWeight: "800" },
+  drawerName:       { fontSize: 17, fontWeight: "700", color: C.text },
+  drawerEmail:      { fontSize: 12, color: C.muted, marginTop: 2 },
 
-  welcome: {
-    fontSize: 18,
-    color: '#38a169',
-    fontWeight: '600',
+  drawerNav:      { paddingTop: 20, paddingHorizontal: 16 },
+  drawerNavLabel: { fontSize: 10, fontWeight: "700", color: C.muted, letterSpacing: 1.2, paddingHorizontal: 8, marginBottom: 8 },
+  drawerItem: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 12, paddingHorizontal: 12,
+    borderRadius: 12, marginBottom: 4,
   },
-
-  statsCard: {
-    backgroundColor: '#fff',
-    margin: 20,
-    padding: 20,
-    borderRadius: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+  drawerItemActive:  { backgroundColor: C.primarySoft },
+  drawerItemDot:     { width: 8, height: 8, borderRadius: 4, marginRight: 12 },
+  drawerItemText:    { flex: 1, fontSize: 15, fontWeight: "600", color: C.subtext },
+  drawerCount: {
+    minWidth: 24, height: 24, borderRadius: 12,
+    backgroundColor: C.surface,
+    justifyContent: "center", alignItems: "center", paddingHorizontal: 6,
   },
+  drawerCountText:  { fontSize: 12, fontWeight: "700", color: C.subtext },
+  drawerDivider:    { height: 1, backgroundColor: C.border, marginHorizontal: 24, marginVertical: 16 },
+  drawerAction:     { paddingVertical: 12, paddingHorizontal: 24 },
+  drawerActionText: { fontSize: 15, fontWeight: "600", color: C.subtext },
 
-  statsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2d3748',
-    marginBottom: 15,
-    textAlign: 'center',
+  // ── Main ────────────────────────────────────────────────────────
+  main: { flex: 1 },
+
+  // Hero header — clean white bar, no big filled block
+  hero: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: C.white,
+    paddingTop: Platform.OS === "ios" ? 54 : 36,
+    paddingBottom: 16, paddingHorizontal: 20,
+    borderBottomWidth: 1, borderBottomColor: C.border,
   },
+  hamburger:    { width: 36, gap: 5, paddingVertical: 4 },
+  bar:          { height: 2.5, width: 22, backgroundColor: C.primaryDark, borderRadius: 2 },
+  heroText:     { flex: 1, paddingHorizontal: 14 },
+  heroGreeting: { fontSize: 12, color: C.muted, fontWeight: "500", letterSpacing: 0.3 },
+  heroName:     { fontSize: 20, color: C.primaryDark, fontWeight: "800", marginTop: 1 },
+  avatarBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: C.primaryLight,
+    borderWidth: 2, borderColor: C.primaryMid,
+    justifyContent: "center", alignItems: "center",
+  },
+  avatarBtnText: { color: C.primaryDark, fontSize: 13, fontWeight: "800" },
 
+  // Stats
   statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row", gap: 8,
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4,
   },
+  statCard: {
+    flex: 1, borderRadius: 12,
+    paddingVertical: 12, paddingHorizontal: 8,
+    alignItems: "center",
+    borderWidth: 1, borderColor: C.border,
+    backgroundColor: C.white,
+  },
+  statNum: { fontSize: 20, fontWeight: "800" },
+  statLbl: { fontSize: 10, fontWeight: "600", marginTop: 2, opacity: 0.75 },
 
-  statItem: {
-    alignItems: 'center',
+  // Tabs
+  tabStrip: {
+    flexDirection: "row", gap: 0,
+    marginHorizontal: 20, marginTop: 16, marginBottom: 10,
+    backgroundColor: C.border,
+    borderRadius: 12, padding: 4,
   },
+  tab: {
+    flex: 1, flexDirection: "row", alignItems: "center",
+    justifyContent: "center", paddingVertical: 9,
+    borderRadius: 9, gap: 5,
+  },
+  tabActive:         { backgroundColor: C.white, shadowColor: C.dark, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  tabText:           { fontSize: 12, fontWeight: "600", color: C.muted },
+  tabTextActive:     { color: C.text },
+  tabBadge: {
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: C.muted,
+    justifyContent: "center", alignItems: "center", paddingHorizontal: 4,
+  },
+  tabBadgeActive:    { backgroundColor: C.primary },
+  tabBadgeText:      { fontSize: 10, fontWeight: "700", color: C.white },
+  tabBadgeTextActive:{ color: C.white },
 
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#38a169',
-  },
+  // List
+  listContent: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 40 },
+  loadingBox:  { alignItems: "center", paddingTop: 80 },
+  loadingText: { marginTop: 14, color: C.subtext, fontSize: 14 },
 
-  statLabel: {
-    fontSize: 12,
-    color: '#718096',
-    marginTop: 5,
+  empty:       { alignItems: "center", paddingTop: 60, paddingHorizontal: 40 },
+  emptyCircle: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: C.primaryLight,
+    justifyContent: "center", alignItems: "center", marginBottom: 20,
   },
+  emptyEmoji: { fontSize: 36 },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: C.text, marginBottom: 8, textAlign: "center" },
+  emptySub:   { fontSize: 14, color: C.muted, textAlign: "center", lineHeight: 22 },
 
-  loadingCard: {
-    backgroundColor: '#e6fffa',
-    margin: 20,
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
+  // Card — spacious, clean
+  card: {
+    flexDirection: "row",
+    backgroundColor: C.white,
+    borderRadius: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: C.border,
+    shadowColor: C.dark, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
+    overflow: "hidden",
   },
+  cardStripe: { width: 4 },
+  cardBody:   { flex: 1, padding: 18 },
+  cardHead:   { flexDirection: "row", alignItems: "flex-start", marginBottom: 8, gap: 8 },
+  cardTitle:  { flex: 1, fontSize: 16, fontWeight: "700", color: C.text, lineHeight: 22 },
+  statusPill: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, alignSelf: "flex-start" },
+  statusPillText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.6 },
+  cardLocRow: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 6 },
+  cardLocDot: { fontSize: 7, color: C.primary },
+  cardLoc:    { fontSize: 13, color: C.subtext, flex: 1, lineHeight: 18 },
 
-  loadingText: {
-    color: '#38a169',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  section: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2d3748',
-  },
-
-  badge: {
-    backgroundColor: '#38a169',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-
-  badgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-
-  emptyState: {
-    backgroundColor: '#fff',
-    padding: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-
-  emptyText: {
-    fontSize: 16,
-    color: '#718096',
-    marginBottom: 5,
-  },
-
-  emptySubtext: {
-    fontSize: 14,
-    color: '#a0aec0',
-  },
-
-  listContainer: {
-    paddingBottom: 10,
-  },
-
-  donationCard: {
-    backgroundColor: '#fff',
-    marginBottom: 12,
-    borderRadius: 15,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-
-  foodName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2d3748',
-    flex: 1,
-  },
-
-  foodType: {
-    fontSize: 12,
-    color: '#718096',
-    backgroundColor: '#f7fafc',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-
-  statusBadge: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#fff',
-    backgroundColor: '#3182ce',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-
-  cardDetails: {
-    marginBottom: 15,
-  },
-
-  detailText: {
-    fontSize: 14,
-    color: '#4a5568',
-    marginBottom: 4,
-  },
+  chipRow:  { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 16 },
+  chip:     { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: C.primarySoft, borderRadius: 20, borderWidth: 1, borderColor: C.primaryLight },
+  chipText: { fontSize: 11, color: C.primary, fontWeight: "600" },
 
   cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row", gap: 8,
+    alignItems: "center", marginTop: 4,
   },
+  btnGhost: {
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8,
+    borderWidth: 1.5, borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  btnGhostText:  { fontSize: 12, fontWeight: "600", color: C.subtext },
+  btnOutline: {
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8,
+    borderWidth: 1.5, borderColor: C.primary,
+    alignItems: "center", justifyContent: "center",
+  },
+  btnOutlineText: { fontSize: 12, fontWeight: "600", color: C.primary },
+  btnPrimary: {
+    paddingVertical: 8, paddingHorizontal: 18, borderRadius: 8,
+    backgroundColor: C.primary,
+    alignItems: "center", justifyContent: "center",
+  },
+  btnAmber: {
+    paddingVertical: 8, paddingHorizontal: 18, borderRadius: 8,
+    backgroundColor: C.primaryDark,
+    alignItems: "center", justifyContent: "center",
+  },
+  btnPrimaryText:   { fontSize: 12, fontWeight: "700", color: C.white },
+  btnPrimaryLoading:{ opacity: 0.55 },
 
-  detailsButton: {
-    backgroundColor: '#e2e8f0',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
-    alignItems: 'center',
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(15,23,42,0.55)", justifyContent: "flex-end" },
+  modalSheet: {
+    backgroundColor: C.white,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 24, paddingBottom: 36, maxHeight: "82%",
   },
-
-  detailsButtonText: {
-    color: '#4a5568',
-    fontSize: 12,
-    fontWeight: '600',
+  modalHandle:    { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginTop: 12, marginBottom: 20 },
+  modalHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
+  modalTitle:     { fontSize: 20, fontWeight: "800", color: C.text, flex: 1, marginRight: 12 },
+  modalCloseBtn:  { width: 32, height: 32, borderRadius: 16, backgroundColor: C.surface, justifyContent: "center", alignItems: "center" },
+  modalCloseTxt:  { fontSize: 14, color: C.subtext, fontWeight: "700" },
+  modalLoading:   { alignItems: "center", paddingVertical: 40 },
+  modalErrBanner: { backgroundColor: C.amberLight, borderRadius: 10, padding: 10, marginBottom: 16 },
+  modalErrText:   { fontSize: 12, color: C.amber },
+  modalRow:       { paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.surface },
+  modalRowLabel:  { fontSize: 10, fontWeight: "700", color: C.muted, letterSpacing: 0.8, marginBottom: 4, textTransform: "uppercase" },
+  modalRowValue:  { fontSize: 15, fontWeight: "500", color: C.text },
+  modalCloseFullBtn: { marginTop: 20, backgroundColor: C.primary, borderRadius: 14, paddingVertical: 15, alignItems: "center" },
+  modalCloseFullTxt: { color: C.white, fontWeight: "700", fontSize: 16 },
+  modalPillClose: {
+    alignSelf: "center", marginTop: 18,
+    paddingVertical: 8, paddingHorizontal: 32,
+    borderRadius: 20, borderWidth: 1.5, borderColor: C.border,
+    backgroundColor: C.surface,
   },
-
-  assignButton: {
-    backgroundColor: '#38a169',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 8,
-    flex: 1,
-    marginLeft: 8,
-    alignItems: 'center',
-  },
-
-  assignButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-
-  statusButton: {
-    backgroundColor: '#3182ce',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    flex: 1,
-    alignItems: 'center',
-  },
-
-  statusButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-
-  completedBadge: {
-    backgroundColor: '#38a169',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    flex: 1,
-    alignItems: 'center',
-  },
-
-  completedText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-
-  bottomContainer: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-
-  primaryButton: {
-    backgroundColor: '#38a169',
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#38a169',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-
-  secondaryButton: {
-    backgroundColor: '#fff',
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-
-  secondaryButtonText: {
-    color: '#4a5568',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  modalPillCloseTxt: { fontSize: 13, fontWeight: "600", color: C.subtext },
 });

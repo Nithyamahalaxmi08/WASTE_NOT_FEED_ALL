@@ -112,8 +112,15 @@ def login(user: LoginSchema):
     if not db_user:
         raise HTTPException(status_code=404, detail="Email not registered")
 
-    if not verify_password(user.password, db_user["password"]):
-        raise HTTPException(status_code=401, detail="Wrong password")
+    print(f"DEBUG: Input password: {user.password}")
+    print(f"DEBUG: Hash from DB: {db_user['password']}")
+
+    try:
+        if not verify_password(user.password, db_user["password"]):
+            raise HTTPException(status_code=401, detail="Wrong password")
+    except Exception as e:
+        print("Password verification error:", e)
+        raise HTTPException(status_code=500, detail="Password verification failed")
 
     if role == "ngo":
         if db_user["verification_status"] != "approved":

@@ -4,182 +4,220 @@ import {
   StyleSheet, SafeAreaView, ScrollView,
   Alert, Platform,
 } from "react-native";
-import { Search, Bell, User, HeartHandshake } from "lucide-react-native";
 import { logoutUser } from "../../services/api";
 
-// ─────────────────────────────────────────────
-// Navbar
-// ─────────────────────────────────────────────
+const C = {
+  primary:     "#2d6a4f",
+  primaryDark: "#1b4332",
+  primaryLight:"#d8f3dc",
+  primarySoft: "#f1faf3",
+  primaryMid:  "#74c69d",
+  text:        "#1b2d25",
+  subtext:     "#4a6560",
+  muted:       "#95b5a8",
+  border:      "#c8e6d4",
+  surface:     "#f6faf7",
+  white:       "#ffffff",
+  danger:      "#dc2626",
+};
 
-const Navbar = ({ navigation, ngoId, onLogout }) => (
-  <View style={styles.navbar}>
-
-    {/* Left — Logo */}
-    <View style={styles.navLeft}>
-      <HeartHandshake size={26} color="#28a745" />
-      <Text style={styles.navLogo}>FoodRescue</Text>
-    </View>
-
-    {/* Center — Nav links */}
-    <View style={styles.navCenter}>
-      <View style={styles.activeNavLinkWrapper}>
-        <Text style={[styles.navLink, styles.activeNavLink]}>Dashboard</Text>
-      </View>
-      <TouchableOpacity onPress={() => navigation.navigate("AvailableDonations", { ngoId })}>
-        <Text style={styles.navLink}>Donations</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => navigation.navigate("ManageEvents", { ngoId })}>
-        <Text style={styles.navLink}>Events</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => navigation.navigate("HungerMap", { ngoId })}>
-        <Text style={styles.navLink}>Hunger Map</Text>
-      </TouchableOpacity>
-    </View>
-
-    {/* Right — Icons + Logout */}
-    <View style={styles.navRight}>
-      <TouchableOpacity style={styles.iconButton}>
-        <Search size={20} color="#555" />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.iconButton}>
-        <Bell size={20} color="#555" />
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.iconButton}
-        onPress={() => navigation.navigate("NGOProfile", { ngoId })}
-      >
-        <User size={20} color="#555" />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
-    </View>
-
-  </View>
-);
-
-// ─────────────────────────────────────────────
-// Main Screen
-// ─────────────────────────────────────────────
+// Professional single-letter icons with distinct bg shades
+const cards = (ngoId) => [
+  {
+    title:    "Hunger Hotspots",
+    subtitle: "AI-powered map of high food demand areas",
+    letter:   "H",
+    bg:       "#1b4332",   // darkest green
+    screen:   "HungerMap",
+    params:   { ngoId },
+  },
+  {
+    title:    "Available Donations",
+    subtitle: "Browse & claim food donations from donors",
+    letter:   "D",
+    bg:       "#2d6a4f",
+    screen:   "AvailableDonations",
+    params:   { ngoId },
+  },
+  {
+    title:    "Manage Events",
+    subtitle: "Create and track pickup/distribution events",
+    letter:   "E",
+    bg:       "#40916c",
+    screen:   "ManageEvents",
+    params:   { ngoId },
+  },
+  {
+    title:    "Assign Volunteers",
+    subtitle: "Assign registered volunteers to tasks",
+    letter:   "V",
+    bg:       "#52b788",
+    screen:   "AssignVolunteers",
+    params:   { ngoId },
+  },
+  {
+    title:    "My Claims",
+    subtitle: "View all donations your NGO has claimed",
+    letter:   "C",
+    bg:       "#74c69d",
+    screen:   "MyClaims",
+    params:   { ngoId },
+  },
+];
 
 export default function NGODashboardScreen({ navigation, route }) {
-  const ngoId   = route?.params?.ngoId   || "";
-  const ngoName = route?.params?.ngoName || "NGO";
-
-  const cards = [
-    {
-      title:    "Hunger Hotspots",
-      subtitle: "AI-powered map of areas with high food demand",
-      icon: "📍", screen: "HungerMap", color: "#E53935",
-      params: { ngoId },
-    },
-    {
-      title:    "Available Donations",
-      subtitle: "Browse & claim food donations from donors",
-      icon: "🍱", screen: "AvailableDonations", color: "#4CAF50",
-      params: { ngoId },
-    },
-    {
-      title:    "Manage Events",
-      subtitle: "Create and track pickup/distribution events",
-      icon: "📅", screen: "ManageEvents", color: "#2196F3",
-      params: { ngoId },
-    },
-    {
-      title:    "Assign Volunteers",
-      subtitle: "Assign registered volunteers to events",
-      icon: "🙋", screen: "AssignVolunteers", color: "#FF9800",
-      params: { ngoId },
-    },
-    {
-      title:    "My Claims",
-      subtitle: "View all donations your NGO has claimed",
-      icon: "📦", screen: "MyClaims", color: "#9C27B0",
-      params: { ngoId },
-    },
-  ];
+  const ngoId = route?.params?.ngoId || "";
 
   const handleLogout = async () => {
-    const confirmed =
-      Platform.OS === "web"
-        ? window.confirm("Are you sure you want to logout?")
-        : await new Promise((resolve) =>
-            Alert.alert("Logout", "Are you sure you want to logout?", [
-              { text: "Cancel", style: "cancel",      onPress: () => resolve(false) },
-              { text: "Logout", style: "destructive", onPress: () => resolve(true)  },
-            ])
-          );
-
-    if (!confirmed) return;
-    try { await logoutUser(); } catch (e) { console.warn(e); }
-    navigation.replace("Login");
+    if (Platform.OS === "web") {
+      if (!window.confirm("Are you sure you want to sign out?")) return;
+      await logoutUser();
+      navigation.replace("Login");
+    } else {
+      Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign Out", style: "destructive", onPress: async () => { await logoutUser(); navigation.replace("Login"); } },
+      ]);
+    }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.root}>
 
-      {/* Navbar */}
-      <Navbar navigation={navigation} ngoId={ngoId} onLogout={handleLogout} />
-
-      <ScrollView contentContainerStyle={styles.scroll}>
-
-        {/* Welcome Banner */}
-        <View style={styles.banner}>
-          <Text style={styles.bannerTitle}>🤝 NGO Dashboard</Text>
-          <Text style={styles.bannerSub}>Welcome back! · Waste Not, Feed All</Text>
+      {/* Rich green header */}
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.headerLabel}>NGO DASHBOARD</Text>
+            <Text style={styles.headerTitle}>Waste Not, Feed All</Text>
+          </View>
+          <TouchableOpacity style={styles.signOutBtn} onPress={handleLogout}>
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Cards */}
-        <View style={styles.grid}>
-          {cards.map((card) => (
-            <TouchableOpacity
-              key={card.screen}
-              style={[styles.card, { borderLeftColor: card.color }]}
-              onPress={() => navigation.navigate(card.screen, card.params)}
-            >
-              <Text style={styles.cardIcon}>{card.icon}</Text>
-              <View style={styles.cardText}>
-                <Text style={styles.cardTitle}>{card.title}</Text>
-                <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
-              </View>
-              <Text style={styles.arrow}>›</Text>
-            </TouchableOpacity>
-          ))}
+        {/* Stats strip inside header */}
+        <View style={styles.statsStrip}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>5</Text>
+            <Text style={styles.statLbl}>Modules</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>NGO</Text>
+            <Text style={styles.statLbl}>Role</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>Live</Text>
+            <Text style={styles.statLbl}>Status</Text>
+          </View>
         </View>
+      </View>
 
+      <ScrollView
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.sectionLabel}>MODULES</Text>
+
+        {cards(ngoId).map((card) => (
+          <TouchableOpacity
+            key={card.screen}
+            style={styles.card}
+            onPress={() => navigation.navigate(card.screen, card.params)}
+            activeOpacity={0.75}
+          >
+            {/* Coloured letter badge */}
+            <View style={[styles.letterBox, { backgroundColor: card.bg }]}>
+              <Text style={styles.letterText}>{card.letter}</Text>
+            </View>
+
+            <View style={styles.cardBody}>
+              <Text style={styles.cardTitle}>{card.title}</Text>
+              <Text style={styles.cardSub}>{card.subtitle}</Text>
+            </View>
+
+            <View style={styles.arrowBox}>
+              <Text style={styles.arrowText}>›</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+
+        <TouchableOpacity style={styles.signOutCard} onPress={handleLogout}>
+          <Text style={styles.signOutCardText}>Sign Out</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 20 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container:            { flex: 1, backgroundColor: "#f0f4f8" },
-  scroll:               { paddingBottom: 40 },
+  root: { flex: 1, backgroundColor: C.surface },
 
-  /* Navbar */
-  navbar:               { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff", paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: "#eee", ...Platform.select({ web: { position: "sticky", top: 0, zIndex: 100 } }) },
-  navLeft:              { flexDirection: "row", alignItems: "center", gap: 10 },
-  navLogo:              { fontSize: 20, fontWeight: "bold", color: "#333" },
-  navCenter:            { flexDirection: "row", alignItems: "center", gap: 24 },
-  navLink:              { fontSize: 15, color: "#555", fontWeight: "500" },
-  activeNavLinkWrapper: { backgroundColor: "#e6f7e9", paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20 },
-  activeNavLink:        { color: "#28a745", fontWeight: "700" },
-  navRight:             { flexDirection: "row", alignItems: "center", gap: 14 },
-  iconButton:           { padding: 5 },
-  logoutButton:         { borderWidth: 1, borderColor: "#ccc", borderRadius: 6, paddingVertical: 7, paddingHorizontal: 14 },
-  logoutText:           { fontSize: 14, color: "#555", fontWeight: "500" },
+  // ── Header ───────────────────────────────────────────────────────
+  header: {
+    backgroundColor: C.primaryDark,
+    paddingTop: Platform.OS === "ios" ? 54 : 36,
+    paddingHorizontal: 20,
+    paddingBottom: 0,
+  },
+  headerTop: {
+    flexDirection: "row", justifyContent: "space-between",
+    alignItems: "flex-start", marginBottom: 20,
+  },
+  headerLabel: { fontSize: 10, fontWeight: "700", color: C.primaryMid, letterSpacing: 1.5 },
+  headerTitle: { fontSize: 22, fontWeight: "800", color: C.white, marginTop: 4 },
+  signOutBtn: {
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: 8, borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  signOutText: { color: "rgba(255,255,255,0.8)", fontWeight: "600", fontSize: 12 },
 
-  /* Banner */
-  banner:               { backgroundColor: "#2e7d32", padding: 24, paddingTop: Platform.OS === "android" ? 40 : 24 },
-  bannerTitle:          { fontSize: 24, fontWeight: "bold", color: "#fff" },
-  bannerSub:            { fontSize: 13, color: "#c8e6c9", marginTop: 4 },
+  statsStrip: {
+    flexDirection: "row",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderTopLeftRadius: 12, borderTopRightRadius: 12,
+    marginHorizontal: -20, paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  statItem:   { flex: 1, alignItems: "center" },
+  statNum:    { fontSize: 16, fontWeight: "800", color: C.white },
+  statLbl:    { fontSize: 10, color: C.primaryMid, marginTop: 2, fontWeight: "600" },
+  statDivider:{ width: 1, backgroundColor: "rgba(255,255,255,0.15)" },
 
-  /* Cards */
-  grid:                 { padding: 16, gap: 14 },
-  card:                 { backgroundColor: "#fff", borderRadius: 14, padding: 18, flexDirection: "row", alignItems: "center", borderLeftWidth: 5, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, gap: 14 },
-  cardIcon:             { fontSize: 34 },
-  cardText:             { flex: 1 },
-  cardTitle:            { fontSize: 16, fontWeight: "700", color: "#1a1a1a" },
-  cardSubtitle:         { fontSize: 13, color: "#666", marginTop: 3 },
-  arrow:                { fontSize: 22, color: "#aaa" },
+  // ── Body ─────────────────────────────────────────────────────────
+  body:         { padding: 16, gap: 8, paddingTop: 18 },
+  sectionLabel: { fontSize: 10, fontWeight: "700", color: C.muted, letterSpacing: 1.2, marginBottom: 4 },
+
+  // ── Card ─────────────────────────────────────────────────────────
+  card: {
+    backgroundColor: C.white,
+    borderRadius: 14, padding: 12,
+    flexDirection: "row", alignItems: "center", gap: 14,
+    borderWidth: 1, borderColor: C.border,
+    shadowColor: C.primaryDark, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+  },
+  letterBox: {
+    width: 42, height: 42, borderRadius: 12,
+    justifyContent: "center", alignItems: "center",
+  },
+  letterText: { fontSize: 18, fontWeight: "800", color: C.white },
+  cardBody:   { flex: 1 },
+  cardTitle:  { fontSize: 15, fontWeight: "700", color: C.text },
+  cardSub:    { fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 15 },
+  arrowBox:   { width: 24, alignItems: "center" },
+  arrowText:  { fontSize: 20, color: C.border, fontWeight: "300" },
+
+  // ── Sign out card ─────────────────────────────────────────────────
+  signOutCard: {
+    marginTop: 4, borderRadius: 10, paddingVertical: 11,
+    alignItems: "center", borderWidth: 1.5,
+    borderColor: "#fecaca", backgroundColor: "#fff5f5",
+  },
+  signOutCardText: { color: C.danger, fontWeight: "700", fontSize: 13 },
 });

@@ -24,6 +24,7 @@ import HungerMapScreen        from "../screens/HungerMapScreen";
 // Volunteer screens
 import VolunteerDashboardScreen from "../screens/VolunteerDashboardScreen";
 import VolunteerProfileScreen from "../screens/VolunteerProfileScreen";
+import DonationMapScreen from "../screens/DonationMapScreen";
 
 // Add this import at the top with the others
 import DonorHomeScreen from "../screens/DonorHomeScreen";
@@ -31,6 +32,9 @@ import ScanScreen      from "../screens/ScanScreen";
 
 import NGOProfileScreen from "../screens/ngo/NGOProfileScreen";
 import DonorProfileScreen from "../screens/DonorProfileScreen";
+
+import AssignDonationVolunteerScreen from "../screens/ngo/AssignDonationVolunteerScreen";
+
 
 const ph = StyleSheet.create({
   wrap:    { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f0f4f8" },
@@ -67,6 +71,9 @@ export default function AppNavigator() {
         options={{ headerShown: true, title: "Hunger Hotspot Map" }} />
       <Stack.Screen name="NGOProfile" component={NGOProfileScreen}
         options={{ headerShown: false }} />
+
+      <Stack.Screen name="AssignDonationVolunteer" component={AssignDonationVolunteerScreen}
+        options={{ headerShown: true, title: "Assign Donation Volunteer" }} />
  
       {/* Donor */}
       <Stack.Screen name="DonorDashboard"    component={DonorDashboard} />
@@ -89,6 +96,10 @@ export default function AppNavigator() {
 
       <Stack.Screen name="DonorProfile" component={DonorProfileScreen}
   options={{ headerShown: false }} />
+
+      {/* ── NEW: Donation Map / Route screen ── */}
+      <Stack.Screen name="DonationMap"        component={DonationMapScreen}
+        options={{ headerShown: true, title: "Get Route" }} />
 
       <Stack.Screen
   name="DonationDetails"
